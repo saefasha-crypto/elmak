@@ -107,6 +107,10 @@
     .auth-link:disabled{opacity:.5;cursor:not-allowed;}
     .verify-email{direction:ltr;color:var(--accent);font-weight:700;word-break:break-all;margin:.6rem 0 1.2rem;}
     .verify-text{color:var(--muted);font-size:.9rem;line-height:1.8;}
+    .pw-wrap{position:relative;}
+    .pw-wrap input{padding-left:3rem;}
+    .pw-eye{position:absolute;left:.6rem;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:1.1rem;padding:.35rem;line-height:1;}
+    .pw-eye:hover{color:var(--text);}
     .hp-field{position:absolute!important;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;}
 
 
@@ -363,7 +367,7 @@
     <!-- LOGIN FORM -->
     <div id="loginForm" class="auth-form">
       <input type="email" id="loginEmail" placeholder="البريد الإلكتروني" onkeydown="if(event.key==='Enter')doLogin()">
-      <input type="password" id="loginPass" placeholder="كلمة المرور" onkeydown="if(event.key==='Enter')doLogin()">
+      <div class="pw-wrap"><input type="password" id="loginPass" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button type="button" class="pw-eye" onclick="togglePw('loginPass',this)" aria-label="إظهار كلمة المرور">👁️</button></div>
       <p id="loginError" class="auth-error"></p>
       <button class="auth-btn" id="loginBtn" onclick="doLogin()">دخول</button>
     </div>
@@ -376,10 +380,10 @@
         <input type="number" id="regAge" placeholder="السن" min="6" max="60" inputmode="numeric">
       </div>
       <input type="email" id="regEmail" placeholder="البريد الإلكتروني" maxlength="100" autocomplete="email">
-      <input type="password" id="regPass" placeholder="كلمة المرور" maxlength="64" autocomplete="new-password" oninput="pwStrength(this.value)">
+      <div class="pw-wrap"><input type="password" id="regPass" placeholder="كلمة المرور" maxlength="64" autocomplete="new-password" oninput="pwStrength(this.value)"><button type="button" class="pw-eye" onclick="togglePw('regPass',this)" aria-label="إظهار كلمة المرور">👁️</button></div>
       <div class="pw-meter"><span id="pwBar"></span></div>
       <p class="auth-hint">8 أحرف على الأقل، فيها حروف وأرقام</p>
-      <input type="password" id="regPass2" placeholder="تأكيد كلمة المرور" maxlength="64" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+      <div class="pw-wrap"><input type="password" id="regPass2" placeholder="تأكيد كلمة المرور" maxlength="64" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"><button type="button" class="pw-eye" onclick="togglePw('regPass2',this)" aria-label="إظهار كلمة المرور">👁️</button></div>
       <input type="text" id="regWebsite" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true">
       <p id="registerError" class="auth-error"></p>
       <p id="registerSuccess" class="auth-success"></p>
@@ -511,7 +515,7 @@
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
            signOut, onAuthStateChanged, updateProfile, sendEmailVerification }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-  import { getFirestore, doc, writeBatch, serverTimestamp }
+  import { getFirestore, doc, setDoc, deleteDoc, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -580,6 +584,14 @@
   }
   const passOk = p => p.length >= 8 && p.length <= 64 && /\p{L}/u.test(p) && /\d/.test(p);
 
+  window.togglePw = function(id, btn) {
+    const i = $(id);
+    const show = i.type === 'password';
+    i.type = show ? 'text' : 'password';
+    btn.textContent = show ? '🙈' : '👁️';
+    btn.setAttribute('aria-label', show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
+  };
+
   window.pwStrength = function(v) {
     let s = 0;
     if (v.length >= 8) s++;
@@ -637,23 +649,28 @@
     registering = true;
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      const uid = cred.user.uid;
       try {
-        // الرقم بيتسجل في phones/{phone} (create فقط) عشان يمنع تكرار الرقم
-        const batch = writeBatch(db);
-        batch.set(doc(db, 'phones', phone), { uid: cred.user.uid });
-        batch.set(doc(db, 'users', cred.user.uid), {
-          name, phone, age, email, createdAt: serverTimestamp()
-        });
-        await batch.commit();
+        await setDoc(doc(db, 'users', uid), { name, phone, age, email, createdAt: serverTimestamp() });
       } catch (e) {
+        console.error('users write failed', e);
         try { await cred.user.delete(); } catch {}
-        throw { code: e.code === 'permission-denied' ? 'app/phone-used' : 'app/profile-failed' };
+        throw { code: e.code === 'permission-denied' ? 'app/rules' : 'app/profile-failed', raw: e.code };
+      }
+      try {
+        // create فقط: لو الرقم موجود قبل كده الـ rules بترفض
+        await setDoc(doc(db, 'phones', phone), { uid });
+      } catch (e) {
+        console.error('phones write failed', e);
+        try { await deleteDoc(doc(db, 'users', uid)); } catch {}
+        try { await cred.user.delete(); } catch {}
+        throw { code: e.code === 'permission-denied' ? 'app/phone-used' : 'app/profile-failed', raw: e.code };
       }
       await updateProfile(cred.user, { displayName: name });
       try { await sendEmailVerification(cred.user); } catch {}
       $('regPass').value = ''; $('regPass2').value = '';
     } catch (e) {
-      err.textContent = getErrMsg(e.code);
+      err.textContent = getErrMsg(e.code) + (e.raw ? ' (' + e.raw + ')' : '');
     }
     registering = false;
     btn.disabled = false; btn.textContent = 'إنشاء الحساب';
@@ -708,6 +725,7 @@
       'auth/too-many-requests':    '⚠ محاولات كتير، استنى شوية وجرب تاني',
       'auth/network-request-failed': '⚠ مشكلة في الاتصال بالإنترنت',
       'app/phone-used':            '⚠ رقم التليفون ده مسجل قبل كده',
+      'app/rules':                 '⚠ قواعد قاعدة البيانات مش منشورة (Firestore Rules)',
       'app/profile-failed':        '⚠ معرفناش نحفظ البيانات، حاول تاني',
     };
     return msgs[code] || '⚠ حصل خطأ، حاول تاني';
