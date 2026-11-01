@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://drive.google.com https://player.vimeo.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="robots" content="noindex,nofollow">
   <title>Elmak — منصة التعلم</title>
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&family=Bebas+Neue&display=swap" rel="stylesheet">
   <style>
@@ -93,6 +96,19 @@
     .auth-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
     .auth-error{color:#ff6b6b;font-size:.82rem;min-height:1.2em;text-align:center;}
     .auth-success{color:var(--green);font-size:.82rem;min-height:1.2em;text-align:center;}
+    .field-row{display:grid;grid-template-columns:1fr 110px;gap:.7rem;}
+    .auth-form input[type=tel],.auth-form input[type=email]{direction:ltr;text-align:right;}
+    .auth-form input[type=number]{-moz-appearance:textfield;}
+    .auth-form input[type=number]::-webkit-outer-spin-button,.auth-form input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+    .pw-meter{height:4px;border-radius:99px;background:rgba(255,255,255,.08);overflow:hidden;margin-top:-.4rem;}
+    .pw-meter span{display:block;height:100%;width:0;transition:width .25s,background .25s;}
+    .auth-hint{color:var(--muted);font-size:.75rem;text-align:right;margin-top:-.4rem;}
+    .auth-link{background:none;border:none;color:var(--pri2);font-family:'Tajawal',sans-serif;cursor:pointer;font-size:.85rem;text-decoration:underline;}
+    .auth-link:disabled{opacity:.5;cursor:not-allowed;}
+    .verify-email{direction:ltr;color:var(--accent);font-weight:700;word-break:break-all;margin:.6rem 0 1.2rem;}
+    .verify-text{color:var(--muted);font-size:.9rem;line-height:1.8;}
+    .hp-field{position:absolute!important;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;}
+
 
     /* ═══ NAV ═══════════════════════════════════ */
     nav{
@@ -354,12 +370,38 @@
 
     <!-- REGISTER FORM -->
     <div id="registerForm" class="auth-form hidden">
-      <input type="text" id="regName" placeholder="الاسم بالكامل" onkeydown="if(event.key==='Enter')doRegister()">
-      <input type="email" id="regEmail" placeholder="البريد الإلكتروني" onkeydown="if(event.key==='Enter')doRegister()">
-      <input type="password" id="regPass" placeholder="كلمة المرور (6 أحرف على الأقل)" onkeydown="if(event.key==='Enter')doRegister()">
+      <input type="text" id="regName" placeholder="الاسم بالكامل" maxlength="60" autocomplete="name">
+      <div class="field-row">
+        <input type="tel" id="regPhone" placeholder="رقم التليفون (01xxxxxxxxx)" maxlength="14" inputmode="numeric" autocomplete="tel">
+        <input type="number" id="regAge" placeholder="السن" min="6" max="60" inputmode="numeric">
+      </div>
+      <input type="email" id="regEmail" placeholder="البريد الإلكتروني" maxlength="100" autocomplete="email">
+      <input type="password" id="regPass" placeholder="كلمة المرور" maxlength="64" autocomplete="new-password" oninput="pwStrength(this.value)">
+      <div class="pw-meter"><span id="pwBar"></span></div>
+      <p class="auth-hint">8 أحرف على الأقل، فيها حروف وأرقام</p>
+      <input type="password" id="regPass2" placeholder="تأكيد كلمة المرور" maxlength="64" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+      <input type="text" id="regWebsite" class="hp-field" tabindex="-1" autocomplete="off" aria-hidden="true">
       <p id="registerError" class="auth-error"></p>
       <p id="registerSuccess" class="auth-success"></p>
       <button class="auth-btn" id="registerBtn" onclick="doRegister()">إنشاء الحساب</button>
+    </div>
+  </div>
+</div>
+
+<!-- VERIFY PAGE -->
+<div id="verifyPage" class="auth-page hidden">
+  <div class="blur blur1"></div>
+  <div class="blur blur2"></div>
+  <div class="auth-box">
+    <div class="auth-logo">ELMAK</div>
+    <p class="verify-text">بعتنالك رسالة تأكيد على الإيميل</p>
+    <p class="verify-email" id="verifyEmail"></p>
+    <p class="verify-text">افتح الرسالة واضغط على الرابط (راجع الـ Spam لو مش لاقيها)، وبعدين ارجع واضغط الزرار.</p>
+    <p id="verifyMsg" class="auth-error" style="margin-top:1rem"></p>
+    <div class="auth-form" style="margin-top:.6rem">
+      <button class="auth-btn" onclick="checkVerified()">أكدت الإيميل ✓</button>
+      <button class="auth-link" id="resendBtn" onclick="resendVerification()">إعادة إرسال الرسالة</button>
+      <button class="auth-link" onclick="doLogout()">خروج</button>
     </div>
   </div>
 </div>
@@ -453,7 +495,7 @@
       </div>
       <div id="tabVideos" class="tab-panel">
         <div class="video-wrap">
-          <div class="main-video"><iframe id="mainVideoFrame" src="" allowfullscreen></iframe></div>
+          <div class="main-video"><iframe id="mainVideoFrame" src="" allowfullscreen sandbox="allow-scripts allow-same-origin allow-presentation allow-popups" referrerpolicy="strict-origin-when-cross-origin" title="فيديو الشرح"></iframe></div>
           <div class="video-list" id="videoList"></div>
         </div>
       </div>
@@ -467,8 +509,10 @@
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-           signOut, onAuthStateChanged, updateProfile }
+           signOut, onAuthStateChanged, updateProfile, sendEmailVerification }
     from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+  import { getFirestore, doc, writeBatch, serverTimestamp }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAK8XZPm7Kevv7anSnIXRRwZaXCPqdJc7o",
@@ -481,76 +525,190 @@
 
   const app  = initializeApp(firebaseConfig);
   const auth = getAuth(app);
+  const db   = getFirestore(app);
+  const $ = id => document.getElementById(id);
 
-  // ── Auth state observer ──
-  onAuthStateChanged(auth, user => {
-    document.getElementById('loader').style.opacity = '0';
-    setTimeout(() => document.getElementById('loader').classList.add('hidden'), 400);
-    if (user) {
-      const name = user.displayName || user.email.split('@')[0];
-      document.getElementById('navUserName').textContent = name;
-      document.getElementById('authPage').classList.add('hidden');
-      document.getElementById('mainApp').classList.remove('hidden');
-    } else {
-      document.getElementById('mainApp').classList.add('hidden');
-      document.getElementById('authPage').classList.remove('hidden');
+  let registering = false;   // يمنع الـ observer من التحويل أثناء إنشاء الحساب
+
+  // ── Routing حسب حالة المستخدم ──
+  function routeUser(user) {
+    ['authPage','verifyPage','mainApp'].forEach(i => $(i).classList.add('hidden'));
+    if (!user) { $('authPage').classList.remove('hidden'); return; }
+    if (!user.emailVerified) {
+      $('verifyEmail').textContent = user.email;
+      $('verifyPage').classList.remove('hidden');
+      return;
     }
+    $('navUserName').textContent = user.displayName || user.email.split('@')[0];
+    $('mainApp').classList.remove('hidden');
+    resetIdle();
+  }
+
+  onAuthStateChanged(auth, user => {
+    $('loader').style.opacity = '0';
+    setTimeout(() => $('loader').classList.add('hidden'), 400);
+    if (registering) return;
+    routeUser(user);
   });
+
+  // ── قفل المحاولات الفاشلة (تأخير تصاعدي) ──
+  const LS_KEY = 'elmak_login_attempts';
+  const readAttempts = () => { try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; } };
+  const writeAttempts = o => { try { localStorage.setItem(LS_KEY, JSON.stringify(o)); } catch {} };
+  function lockedFor() {
+    const d = readAttempts();
+    return d.until && d.until > Date.now() ? Math.ceil((d.until - Date.now()) / 1000) : 0;
+  }
+  function failAttempt() {
+    const n = (readAttempts().n || 0) + 1;
+    const o = { n };
+    if (n >= 5) o.until = Date.now() + 30000 * Math.min(2 ** (n - 5), 20);
+    writeAttempts(o);
+  }
+  const clearAttempts = () => { try { localStorage.removeItem(LS_KEY); } catch {} };
+
+  // ── Validators ──
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+  const NAME_RE  = /^[\p{L}][\p{L}\s'.-]{2,59}$/u;
+  const PHONE_RE = /^01[0125]\d{8}$/;
+  function normalizePhone(v) {
+    let s = String(v).replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+                     .replace(/[^\d]/g, '');
+    if (s.startsWith('0020')) s = s.slice(4);
+    if (s.startsWith('20') && s.length === 12) s = '0' + s.slice(2);
+    return s;
+  }
+  const passOk = p => p.length >= 8 && p.length <= 64 && /\p{L}/u.test(p) && /\d/.test(p);
+
+  window.pwStrength = function(v) {
+    let s = 0;
+    if (v.length >= 8) s++;
+    if (v.length >= 12) s++;
+    if (/\p{L}/u.test(v) && /\d/.test(v)) s++;
+    if (/[^\p{L}\d]/u.test(v)) s++;
+    const bar = $('pwBar');
+    bar.style.width = (s * 25) + '%';
+    bar.style.background = ['#ff6b6b','#ff6b6b','#f7c948','#34d399','#34d399'][s];
+  };
 
   // ── Login ──
   window.doLogin = async function() {
-    const email = document.getElementById('loginEmail').value.trim();
-    const pass  = document.getElementById('loginPass').value.trim();
-    const err   = document.getElementById('loginError');
-    const btn   = document.getElementById('loginBtn');
+    const email = $('loginEmail').value.trim().toLowerCase();
+    const pass  = $('loginPass').value;
+    const err = $('loginError'), btn = $('loginBtn');
     err.textContent = '';
     if (!email || !pass) { err.textContent = '⚠ ادخل الإيميل وكلمة المرور'; return; }
+    if (!EMAIL_RE.test(email)) { err.textContent = getErrMsg('auth/invalid-email'); return; }
+    const wait = lockedFor();
+    if (wait) { err.textContent = `⚠ محاولات كتير، استنى ${wait} ثانية`; return; }
     btn.disabled = true; btn.textContent = 'جاري الدخول...';
     try {
       await signInWithEmailAndPassword(auth, email, pass);
-    } catch(e) {
+      clearAttempts();
+      $('loginPass').value = '';
+    } catch (e) {
+      failAttempt();
       err.textContent = getErrMsg(e.code);
-      btn.disabled = false; btn.textContent = 'دخول';
     }
+    btn.disabled = false; btn.textContent = 'دخول';
   };
 
   // ── Register ──
   window.doRegister = async function() {
-    const name  = document.getElementById('regName').value.trim();
-    const email = document.getElementById('regEmail').value.trim();
-    const pass  = document.getElementById('regPass').value.trim();
-    const err   = document.getElementById('registerError');
-    const suc   = document.getElementById('registerSuccess');
-    const btn   = document.getElementById('registerBtn');
+    if ($('regWebsite').value) return;               // honeypot (بوتات)
+    const name  = $('regName').value.trim().replace(/\s+/g, ' ');
+    const phone = normalizePhone($('regPhone').value);
+    const age   = Number($('regAge').value);
+    const email = $('regEmail').value.trim().toLowerCase();
+    const pass  = $('regPass').value;
+    const pass2 = $('regPass2').value;
+    const err = $('registerError'), suc = $('registerSuccess'), btn = $('registerBtn');
     err.textContent = ''; suc.textContent = '';
-    if (!name || !email || !pass) { err.textContent = '⚠ ادخل كل البيانات'; return; }
-    if (pass.length < 6) { err.textContent = '⚠ كلمة المرور 6 أحرف على الأقل'; return; }
+
+    if (!name || !phone || !$('regAge').value || !email || !pass) { err.textContent = '⚠ ادخل كل البيانات'; return; }
+    if (!NAME_RE.test(name))  { err.textContent = '⚠ الاسم لازم حروف بس (3 أحرف على الأقل)'; return; }
+    if (!PHONE_RE.test(phone)){ err.textContent = '⚠ رقم التليفون لازم يكون رقم موبايل مصري صحيح'; return; }
+    if (!Number.isInteger(age) || age < 6 || age > 60) { err.textContent = '⚠ السن لازم يكون بين 6 و 60'; return; }
+    if (!EMAIL_RE.test(email)){ err.textContent = getErrMsg('auth/invalid-email'); return; }
+    if (!passOk(pass))        { err.textContent = '⚠ كلمة المرور 8 أحرف على الأقل وفيها حروف وأرقام'; return; }
+    if (pass !== pass2)       { err.textContent = '⚠ كلمتين المرور مش متطابقتين'; return; }
+
     btn.disabled = true; btn.textContent = 'جاري الإنشاء...';
+    registering = true;
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
+      try {
+        // الرقم بيتسجل في phones/{phone} (create فقط) عشان يمنع تكرار الرقم
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'phones', phone), { uid: cred.user.uid });
+        batch.set(doc(db, 'users', cred.user.uid), {
+          name, phone, age, email, createdAt: serverTimestamp()
+        });
+        await batch.commit();
+      } catch (e) {
+        try { await cred.user.delete(); } catch {}
+        throw { code: e.code === 'permission-denied' ? 'app/phone-used' : 'app/profile-failed' };
+      }
       await updateProfile(cred.user, { displayName: name });
-    } catch(e) {
+      try { await sendEmailVerification(cred.user); } catch {}
+      $('regPass').value = ''; $('regPass2').value = '';
+    } catch (e) {
       err.textContent = getErrMsg(e.code);
-      btn.disabled = false; btn.textContent = 'إنشاء الحساب';
     }
+    registering = false;
+    btn.disabled = false; btn.textContent = 'إنشاء الحساب';
+    routeUser(auth.currentUser);
   };
 
-  // ── Logout ──
+  // ── Email verification ──
+  window.checkVerified = async function() {
+    const msg = $('verifyMsg');
+    msg.textContent = '';
+    try {
+      await auth.currentUser.reload();
+      if (auth.currentUser.emailVerified) routeUser(auth.currentUser);
+      else msg.textContent = '⚠ الإيميل لسه متأكدش';
+    } catch { msg.textContent = getErrMsg(''); }
+  };
+  window.resendVerification = async function() {
+    const btn = $('resendBtn'), msg = $('verifyMsg');
+    msg.textContent = '';
+    btn.disabled = true;
+    try { await sendEmailVerification(auth.currentUser); msg.style.color = 'var(--green)'; msg.textContent = 'اتبعتت الرسالة تاني ✓'; }
+    catch (e) { msg.style.color = ''; msg.textContent = getErrMsg(e.code); }
+    setTimeout(() => { btn.disabled = false; }, 60000);
+  };
+
+  // ── Logout + خروج تلقائي بعد 30 دقيقة خمول ──
   window.doLogout = async function() {
+    clearTimeout(idleTimer);
     await signOut(auth);
     window.appState = { grade:null, gradeName:'', history:[] };
+    ['loginEmail','loginPass','regName','regPhone','regAge','regEmail','regPass','regPass2']
+      .forEach(i => { $(i).value = ''; });
     showPage('pageGrades');
   };
+  let idleTimer;
+  const IDLE_MS = 30 * 60 * 1000;
+  function resetIdle() {
+    clearTimeout(idleTimer);
+    if (auth.currentUser) idleTimer = setTimeout(() => window.doLogout(), IDLE_MS);
+  }
+  ['click','keydown','touchstart','scroll'].forEach(ev =>
+    window.addEventListener(ev, resetIdle, { passive: true }));
 
   function getErrMsg(code) {
     const msgs = {
-      'auth/user-not-found':    '⚠ الإيميل ده مش موجود',
-      'auth/wrong-password':    '⚠ كلمة المرور غلط',
+      'auth/user-not-found':       '⚠ الإيميل أو كلمة المرور غلط',
+      'auth/wrong-password':       '⚠ الإيميل أو كلمة المرور غلط',
+      'auth/invalid-credential':   '⚠ الإيميل أو كلمة المرور غلط',
       'auth/email-already-in-use': '⚠ الإيميل ده مسجل قبل كده',
-      'auth/invalid-email':     '⚠ صيغة الإيميل غلط',
-      'auth/weak-password':     '⚠ كلمة المرور ضعيفة',
-      'auth/invalid-credential':'⚠ الإيميل أو كلمة المرور غلط',
-      'auth/too-many-requests': '⚠ كتير أوي، استنى شوية',
+      'auth/invalid-email':        '⚠ صيغة الإيميل غلط',
+      'auth/weak-password':        '⚠ كلمة المرور ضعيفة',
+      'auth/too-many-requests':    '⚠ محاولات كتير، استنى شوية وجرب تاني',
+      'auth/network-request-failed': '⚠ مشكلة في الاتصال بالإنترنت',
+      'app/phone-used':            '⚠ رقم التليفون ده مسجل قبل كده',
+      'app/profile-failed':        '⚠ معرفناش نحفظ البيانات، حاول تاني',
     };
     return msgs[code] || '⚠ حصل خطأ، حاول تاني';
   }
@@ -648,6 +806,24 @@ window.goBack = function() {
   showPage(prev);
 };
 
+// ══ SECURITY HELPERS ══
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function safePdfUrl(u) {
+  try { const x = new URL(u); return x.protocol === 'https:' ? x.href : '#'; } catch { return '#'; }
+}
+function safeVideoUrl(u) {
+  try {
+    const x = new URL(u);
+    if (x.protocol !== 'https:') return '';
+    const h = x.hostname;
+    if ((h === 'www.youtube.com' || h === 'www.youtube-nocookie.com') && x.pathname.startsWith('/embed/')) return x.href;
+    if (h === 'drive.google.com' && x.pathname.endsWith('/preview')) return x.href;
+    if (h === 'player.vimeo.com' && x.pathname.startsWith('/video/')) return x.href;
+  } catch {}
+  return '';
+}
+let currentVideos = [];
+
 // ══ GRADE SELECT ══
 window.selectGrade = function(gradeId, gradeName) {
   window.appState.grade = gradeId;
@@ -656,14 +832,25 @@ window.selectGrade = function(gradeId, gradeName) {
   document.getElementById('subjectsTitle').textContent = 'مواد ' + gradeName;
   const grid = document.getElementById('subjectsGrid');
   grid.innerHTML = (SUBJECTS[gradeId]||[]).map(s =>
-    `<div class="subject-card ${s.color}" onclick="selectSubject('${s.id}','${s.name}','${s.icon}')">
-      <span class="subj-icon">${s.icon}</span>
-      <div class="subj-name">${s.name}</div>
+    `<div class="subject-card ${esc(s.color)}" role="button" tabindex="0"
+          data-id="${esc(s.id)}" data-name="${esc(s.name)}" data-icon="${esc(s.icon)}">
+      <span class="subj-icon">${esc(s.icon)}</span>
+      <div class="subj-name">${esc(s.name)}</div>
       <div class="subj-count">PDF + فيديوهات</div>
     </div>`
   ).join('');
   showPage('pageSubjects');
 };
+
+document.getElementById('subjectsGrid').addEventListener('click', e => {
+  const c = e.target.closest('.subject-card');
+  if (c) selectSubject(c.dataset.id, c.dataset.name, c.dataset.icon);
+});
+document.getElementById('subjectsGrid').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const c = e.target.closest('.subject-card');
+  if (c) selectSubject(c.dataset.id, c.dataset.name, c.dataset.icon);
+});
 
 // ══ SUBJECT ══
 window.selectSubject = function(subjectId, subjectName, subjectIcon) {
@@ -687,31 +874,44 @@ function renderPdfs(pdfs) {
   g.innerHTML = pdfs.map(f=>`
     <div class="pdf-card">
       <div class="pdf-info"><div class="pdf-icon">📄</div>
-        <div><div class="pdf-name">${f.name}</div><div class="pdf-meta">${f.meta||''}</div></div>
+        <div><div class="pdf-name">${esc(f.name)}</div><div class="pdf-meta">${esc(f.meta||'')}</div></div>
       </div>
-      <a class="pdf-dl" href="${f.url||'#'}" target="_blank">تحميل ⬇</a>
+      <a class="pdf-dl" href="${esc(safePdfUrl(f.url))}" target="_blank" rel="noopener noreferrer">تحميل ⬇</a>
     </div>`).join('');
 }
 
 function renderVideos(videos) {
   const list = document.getElementById('videoList');
   const frame = document.getElementById('mainVideoFrame');
-  if (!videos||!videos.length) {
-    frame.src='';
+  currentVideos = (videos||[]).map(v => ({ ...v, url: safeVideoUrl(v.url) })).filter(v => v.url);
+  if (!currentVideos.length) {
+    frame.src='about:blank';
     list.innerHTML=`<div class="empty-state"><div class="es-icon">🎬</div><p>لسه مفيش فيديوهات</p><small>هيتضاف المحتوى قريباً</small></div>`;
     return;
   }
-  frame.src = videos[0].url;
-  list.innerHTML = videos.map((v,i)=>`
-    <div class="video-item ${i===0?'playing':''}" onclick="playVideo('${v.url}',this)">
+  frame.src = currentVideos[0].url;
+  list.innerHTML = currentVideos.map((v,i)=>`
+    <div class="video-item ${i===0?'playing':''}" data-i="${i}" role="button" tabindex="0">
       <div class="vi-thumb">▶</div>
-      <div><div class="vi-name">${v.name}</div><div class="vi-meta">${v.meta||''}</div></div>
+      <div><div class="vi-name">${esc(v.name)}</div><div class="vi-meta">${esc(v.meta||'')}</div></div>
     </div>`).join('');
 }
 
-window.playVideo = function(url, el) {
-  document.getElementById('mainVideoFrame').src = url;
-  document.querySelectorAll('.video-item').forEach(v=>v.classList.remove('playing'));
+document.getElementById('videoList').addEventListener('click', e => {
+  const el = e.target.closest('.video-item');
+  if (el) playVideo(Number(el.dataset.i), el);
+});
+document.getElementById('videoList').addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  const el = e.target.closest('.video-item');
+  if (el) playVideo(Number(el.dataset.i), el);
+});
+
+window.playVideo = function(i, el) {
+  const v = currentVideos[i];
+  if (!v) return;
+  document.getElementById('mainVideoFrame').src = v.url;
+  document.querySelectorAll('.video-item').forEach(x=>x.classList.remove('playing'));
   el.classList.add('playing');
 };
 
